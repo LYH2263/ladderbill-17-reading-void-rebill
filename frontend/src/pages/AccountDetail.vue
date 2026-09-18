@@ -9,7 +9,8 @@ const bill = ref(null)
 const peak = ref(false)
 const load = async () => {
   data.value = await getJSON(`/api/accounts/${route.params.id}`)
-  const r = data.value.readings[0]
+  // 默认测算候选只取有效抄表，已作废抄表不参与
+  const r = data.value.readings.find((x) => !x.voided)
   if (r) bill.value = await postJSON('/api/bill', { account_id: +route.params.id, kwh: r.kwh, peak: !!r.peak, persist: false })
 }
 onMounted(load)

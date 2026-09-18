@@ -17,6 +17,7 @@ class CalcRunOut(BaseModel):
     id: int
     kind: str
     account_id: int | None
+    reading_id: int | None = None
     input_json: str
     result_json: str
     created_at: str
