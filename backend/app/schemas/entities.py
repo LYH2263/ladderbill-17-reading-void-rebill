@@ -17,6 +17,9 @@ class TierOut(BaseModel):
 
 class ReadingOut(BaseModel):
     id: int
-    account_id: int
+    account_id: int | None = None
     kwh: float
-    peak: int
+    peak: int = 0
+    voided: int = 0
+    void_reason: str | None = None
+    voided_at: str | None = None

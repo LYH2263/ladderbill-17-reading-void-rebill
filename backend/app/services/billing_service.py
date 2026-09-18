@@ -10,6 +10,14 @@ from app.repositories import settings as settings_repo
 from app.repositories import tiers as tiers_repo
 
 
+class ReadingNotFoundError(LookupError):
+    pass
+
+
+class ReadingVoidedError(ValueError):
+    pass
+
+
 class BillingService:
     def __init__(self):
         self._conn = connect()
@@ -32,8 +40,46 @@ class BillingService:
     def list_tiers(self):
         return tiers_repo.list_ordered(self._conn)
 
-    def list_readings(self):
-        return readings_repo.list_all(self._conn)
+    def list_readings(self, include_voided: bool = False):
+        return readings_repo.list_all(self._conn, include_voided)
+
+    def get_reading(self, reading_id: int):
+        return readings_repo.get(self._conn, reading_id)
+
+    def void_reading(self, reading_id: int, reason: str):
+        reading = readings_repo.get(self._conn, reading_id)
+        if not reading:
+            raise ReadingNotFoundError(f"reading {reading_id} not found")
+        if reading["voided"]:
+            raise ReadingVoidedError(f"reading {reading_id} already voided")
+        readings_repo.mark_void(self._conn, reading_id, reason.strip())
+        return readings_repo.get(self._conn, reading_id)
+
+    def retest_reading(self, reading_id: int):
+        reading = readings_repo.get(self._conn, reading_id)
+        if not reading:
+            raise ReadingNotFoundError(f"reading {reading_id} not found")
+        if reading["voided"]:
+            raise ReadingVoidedError("voided readings cannot be retested")
+        tiers = tiers_repo.as_calc_rows(self._conn)
+        pf = settings_repo.peak_factor(self._conn)
+        factor = pf if reading["peak"] else 1.0
+        result = calc_bill(reading["kwh"], tiers, factor)
+        payload = {
+            "kwh": reading["kwh"],
+            "peak": bool(reading["peak"]),
+            "account_id": reading["account_id"],
+            "reading_id": reading_id,
+        }
+        run_id = runs_repo.insert(
+            self._conn,
+            "retest",
+            payload,
+            result,
+            reading["account_id"],
+            reading_id,
+        )
+        return {"run_id": run_id, "reading_id": reading_id, **result}
 
     def readings_for_account(self, account_id: int):
         return readings_repo.for_account(self._conn, account_id)
